@@ -1,65 +1,89 @@
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, Suspense } from 'react'
 import './styles/neu.css'
-import Home from './pages/Home'
-import Welcome from './pages/Welcome'
-import Send from './pages/Send'
-import Receive from './pages/Receive'
-import Settings from './pages/Settings'
-import AddToken from './pages/AddToken'
-import { KeyringController } from './lib/keyring'
-import { NetworkController } from './lib/networks'
+
+// Lazy load components to split bundle
+const Home = React.lazy(() => import('./pages/Home'));
+const Welcome = React.lazy(() => import('./pages/Welcome'));
+const Send = React.lazy(() => import('./pages/Send'));
+const Receive = React.lazy(() => import('./pages/Receive'));
+const Settings = React.lazy(() => import('./pages/Settings'));
+const AddToken = React.lazy(() => import('./pages/AddToken'));
+
+// We need a small loading component
+const Loader = () => (
+    <div className="app-container" style={{ justifyContent: 'center', alignItems: 'center', height: '100%' }}>
+        <p>Loading...</p>
+    </div>
+);
 
 function App() {
-    const [view, setView] = useState('loading'); // loading, welcome, home, send, receive, settings, add-token
+    const [view, setView] = useState('loading');
     const [network, setNetwork] = useState('bsc');
-    const [networkController] = useState(() => new NetworkController());
+    const [networkController, setNetworkController] = useState(null);
 
     useEffect(() => {
-        checkWallet();
-        networkController.load().then(() => {
-            // Force update if networks change
-        });
-    }, []);
+        // Dynamically import heavy logic
+        const init = async () => {
+            try {
+                const { NetworkController } = await import('./lib/networks');
+                const { KeyringController } = await import('./lib/keyring');
 
-    const checkWallet = async () => {
-        const keyring = new KeyringController();
-        const hasWallet = await keyring.load('password');
-        if (hasWallet) {
-            setView('home');
-        } else {
-            setView('welcome');
-        }
-    };
+                const nc = new NetworkController();
+                await nc.load();
+                setNetworkController(nc);
+
+                const keyring = new KeyringController();
+                const hasWallet = await keyring.load('password');
+                if (hasWallet) {
+                    setView('home');
+                } else {
+                    setView('welcome');
+                }
+            } catch (e) {
+                console.error("Failed to init app", e);
+            }
+        };
+        init();
+    }, []);
 
     const handleWalletCreated = () => {
         setView('home');
     };
 
-    if (view === 'loading') return <div className="app-container" style={{ justifyContent: 'center', alignItems: 'center' }}>Loading...</div>;
+    // Render logic
+    return (
+        <Suspense fallback={<Loader />}>
+            {view === 'loading' && <Loader />}
 
-    if (view === 'welcome') return <Welcome onComplete={handleWalletCreated} />;
+            {view === 'welcome' && <Welcome onComplete={handleWalletCreated} />}
 
-    if (view === 'home') return (
-        <Home
-            onSend={() => setView('send')}
-            onReceive={() => setView('receive')}
-            onSettings={() => setView('settings')}
-            onAddToken={() => setView('add-token')}
-            network={network}
-            setNetwork={setNetwork}
-            networkController={networkController}
-        />
+            {view === 'home' && networkController && (
+                <Home
+                    onSend={() => setView('send')}
+                    onReceive={() => setView('receive')}
+                    onSettings={() => setView('settings')}
+                    onAddToken={() => setView('add-token')}
+                    network={network}
+                    setNetwork={setNetwork}
+                    networkController={networkController}
+                />
+            )}
+
+            {view === 'send' && networkController && (
+                <Send onBack={() => setView('home')} network={network} networkController={networkController} />
+            )}
+
+            {view === 'receive' && <Receive onBack={() => setView('home')} />}
+
+            {view === 'settings' && networkController && (
+                <Settings onBack={() => setView('home')} networkController={networkController} />
+            )}
+
+            {view === 'add-token' && networkController && (
+                <AddToken onBack={() => setView('home')} network={network} networkController={networkController} />
+            )}
+        </Suspense>
     );
-
-    if (view === 'send') return <Send onBack={() => setView('home')} network={network} networkController={networkController} />;
-
-    if (view === 'receive') return <Receive onBack={() => setView('home')} />;
-
-    if (view === 'settings') return <Settings onBack={() => setView('home')} networkController={networkController} />;
-
-    if (view === 'add-token') return <AddToken onBack={() => setView('home')} network={network} networkController={networkController} />;
-
-    return null;
 }
 
 export default App

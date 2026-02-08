@@ -86,11 +86,16 @@ export class KeyringController {
         const result = await chrome.storage.local.get('vault');
         if (result.vault) {
             const data = JSON.parse(result.vault);
-            if (data.mnemonic) {
+
+            // Optimization: Prefer loading from privateKey (instanteous) over mnemonic (slow derivation)
+            if (data.privateKey) {
+                this.wallet = new ethers.Wallet(data.privateKey);
+                this.mnemonic = data.mnemonic || null;
+            } else if (data.mnemonic) {
+                // Fallback for older vaults or mnemonic-only imports
                 await this.importMnemonic(data.mnemonic);
-            } else if (data.privateKey) {
-                await this.importPrivateKey(data.privateKey);
             }
+
             return true;
         }
         return false;

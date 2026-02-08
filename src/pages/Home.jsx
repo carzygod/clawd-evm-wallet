@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import Button from '../components/Button';
 import Card from '../components/Card';
+import NetworkSelector from '../components/NetworkSelector';
 import { TransactionController } from '../lib/transaction';
 import { KeyringController } from '../lib/keyring';
 import { TokenController } from '../lib/tokens';
@@ -14,39 +15,72 @@ function Home({ onSend, onReceive, onSettings, onAddToken, network, setNetwork, 
 
     useEffect(() => {
         setNetworks(networkController.getAllNetworks());
-        loadData();
+
+        // 1. Load immediate cache if available
+        const loadCache = async () => {
+            const keyring = new KeyringController();
+            if (await keyring.load('password')) {
+                const userAddress = keyring.getAddress();
+                setAddress(userAddress);
+
+                const cacheKey = `cache_${network}_${userAddress}`;
+                const cached = await chrome.storage.local.get(cacheKey);
+                if (cached[cacheKey]) {
+                    const data = JSON.parse(cached[cacheKey]);
+                    setBalance(data.balance || '0.00');
+                    setTokens(data.tokens || []);
+                }
+
+                // 2. Trigger network update in background
+                fetchData(keyring, userAddress);
+            }
+        };
+
+        loadCache();
+
     }, [network, networkController]);
 
-    // Re-run this when coming back to home
+    // Polling
     useEffect(() => {
         const interval = setInterval(() => {
             setNetworks(networkController.getAllNetworks());
-        }, 5000); // Polling slower
+        }, 5000);
         return () => clearInterval(interval);
     }, [networkController]);
 
-    const loadData = async () => {
-        const keyring = new KeyringController();
-        if (await keyring.load('password')) {
-            setAddress(keyring.getAddress());
+    const fetchData = async (keyring, userAddress) => {
+        try {
             const provider = networkController.getProvider(network);
             const txController = new TransactionController(keyring, provider);
 
             // Native Balance
             const bal = await txController.getBalance();
-            setBalance(Number(bal).toFixed(4));
+            const formattedBal = Number(bal).toFixed(4);
+            setBalance(formattedBal);
 
             // Token Balances
             const tokenController = new TokenController();
             await tokenController.load();
             const storedTokens = tokenController.getTokens(network);
-            const tokenBalances = await tokenController.getTokenBalances(network, keyring.getAddress(), provider);
+            const tokenBalances = await tokenController.getTokenBalances(network, userAddress, provider);
 
             const tokensWithBal = storedTokens.map(t => ({
                 ...t,
                 balance: tokenBalances[t.address] || '0'
             }));
             setTokens(tokensWithBal);
+
+            // Update Cache
+            const cacheKey = `cache_${network}_${userAddress}`;
+            await chrome.storage.local.set({
+                [cacheKey]: JSON.stringify({
+                    balance: formattedBal,
+                    tokens: tokensWithBal,
+                    timestamp: Date.now()
+                })
+            });
+        } catch (e) {
+            console.error("Background fetch failed", e);
         }
     };
 
@@ -59,34 +93,22 @@ function Home({ onSend, onReceive, onSettings, onAddToken, network, setNetwork, 
     return (
         <div className="home-container" style={{ padding: '24px', height: '100%', display: 'flex', flexDirection: 'column', gap: '20px' }}>
             {/* Header with Settings */}
-            <div className="flex-between">
+            <div className="flex-between" style={{ zIndex: 100 }}> {/* Z-index for dropdown */}
                 <div style={{ width: '40px' }}></div>
-                <div className="neu-input" style={{ width: 'auto', padding: '8px 16px', margin: 0, display: 'flex', alignItems: 'center' }}>
-                    <select
-                        value={network}
-                        onChange={(e) => setNetwork(e.target.value)}
-                        style={{
-                            border: 'none',
-                            background: 'transparent',
-                            fontWeight: '600',
-                            fontSize: '14px',
-                            color: 'var(--text-color)',
-                            outline: 'none',
-                            cursor: 'pointer'
-                        }}
-                    >
-                        {Object.entries(networks).map(([key, net]) => (
-                            <option key={key} value={key}>{net.name}</option>
-                        ))}
-                    </select>
-                </div>
+
+                <NetworkSelector
+                    network={network}
+                    setNetwork={setNetwork}
+                    networks={networks}
+                />
+
                 <Button onClick={onSettings} style={{ padding: '0', borderRadius: '50%', width: '40px', height: '40px' }}>
                     <span style={{ fontSize: '18px' }}>⚙️</span>
                 </Button>
             </div>
 
             {/* Balance Card */}
-            <Card style={{ textAlign: 'center', padding: '40px 20px', display: 'flex', flexDirection: 'column', justifyContent: 'center', minHeight: '140px' }}>
+            <Card style={{ textAlign: 'center', padding: '40px 20px', display: 'flex', flexDirection: 'column', justifyContent: 'center', minHeight: '140px', zIndex: 1 }}>
                 <p style={{ margin: 0, fontSize: '13px', textTransform: 'uppercase', letterSpacing: '1px', opacity: 0.7 }}>Total Balance</p>
                 <h1 style={{ margin: '12px 0', fontSize: '36px', letterSpacing: '-1px' }}>
                     {balance} <span style={{ fontSize: '16px', fontWeight: '500', opacity: 0.8 }}>{networks[network]?.symbol || ''}</span>
@@ -113,7 +135,7 @@ function Home({ onSend, onReceive, onSettings, onAddToken, network, setNetwork, 
             </Card>
 
             {/* Actions */}
-            <div style={{ display: 'flex', justifyContent: 'space-around', padding: '0 10px' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-around', padding: '0 10px', zIndex: 1 }}>
                 <div className="text-center">
                     <Button onClick={onSend} style={{ borderRadius: '50%', width: '64px', height: '64px', padding: 0 }}>
                         <span style={{ fontSize: '24px' }}>↑</span>
@@ -135,7 +157,7 @@ function Home({ onSend, onReceive, onSettings, onAddToken, network, setNetwork, 
             </div>
 
             {/* Token List */}
-            <div style={{ flex: 1, overflowY: 'auto', paddingRight: '4px' }}>
+            <div style={{ flex: 1, overflowY: 'auto', paddingRight: '4px', zIndex: 1 }}>
                 <div className="flex-between mb-4">
                     <h3 style={{ fontSize: '16px', opacity: 0.8 }}>Assets</h3>
                     <Button onClick={onAddToken} style={{ padding: '4px 12px', fontSize: '12px', height: 'auto', borderRadius: '8px' }}>+ Add</Button>
