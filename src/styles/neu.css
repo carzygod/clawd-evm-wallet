@@ -1,0 +1,208 @@
+@import url('https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;700&display=swap');
+
+:root {
+  --bg-color: #ffd700;
+  /* Bright Yellow */
+  --text-color: #4a4a4a;
+  --accent-color: #333333;
+
+  /* Neumorphic Shadows - adjusted for yellow */
+  --shadow-light: #ffeaa3;
+  /* Lighter yellow highlight */
+  --shadow-dark: #d9b700;
+  /* Darker yellow shadow */
+
+  --font-family: 'Outfit', sans-serif;
+  --radius-lg: 20px;
+  --radius-md: 12px;
+  --radius-sm: 8px;
+}
+
+html {
+  width: 360px;
+  height: 600px;
+}
+
+body {
+  background-color: var(--bg-color);
+  color: var(--text-color);
+  font-family: var(--font-family);
+  margin: 0;
+  padding: 0;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  /* Hide scrollbars if content overflows slightly */
+  user-select: none;
+}
+
+#root {
+  width: 100%;
+  height: 100%;
+}
+
+.app-container {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  padding: 24px;
+  box-sizing: border-box;
+  overflow-y: auto;
+  /* Allow internal scrolling if needed */
+}
+
+/* Custom Scrollbar for container */
+.app-container::-webkit-scrollbar {
+  width: 4px;
+}
+
+.app-container::-webkit-scrollbar-thumb {
+  background: rgba(0, 0, 0, 0.1);
+  border-radius: 2px;
+}
+
+h1,
+h2,
+h3 {
+  margin: 0;
+  color: var(--accent-color);
+}
+
+h1 {
+  font-size: 28px;
+  font-weight: 700;
+}
+
+h2 {
+  font-size: 20px;
+  font-weight: 700;
+}
+
+h3 {
+  font-size: 16px;
+  font-weight: 600;
+}
+
+p {
+  font-size: 14px;
+  line-height: 1.5;
+  color: #5c5c5c;
+}
+
+/* Components */
+
+/* CARD: Raised surface */
+.neu-card {
+  background: var(--bg-color);
+  border-radius: var(--radius-lg);
+  padding: 20px;
+  box-shadow:
+    9px 9px 18px var(--shadow-dark),
+    -9px -9px 18px var(--shadow-light);
+  margin-bottom: 20px;
+  transition: all 0.3s ease;
+}
+
+/* BUTTON: Convex normally, Concave on press */
+.neu-btn {
+  border: none;
+  background: var(--bg-color);
+  border-radius: var(--radius-md);
+  padding: 14px 24px;
+  color: var(--accent-color);
+  font-weight: 600;
+  font-size: 14px;
+  cursor: pointer;
+  box-shadow:
+    6px 6px 12px var(--shadow-dark),
+    -6px -6px 12px var(--shadow-light);
+  transition: all 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.neu-btn:hover:not(:disabled) {
+  transform: translateY(-2px);
+  box-shadow:
+    8px 8px 16px var(--shadow-dark),
+    -8px -8px 16px var(--shadow-light);
+}
+
+.neu-btn:active:not(:disabled) {
+  transform: translateY(1px);
+  box-shadow: inset 4px 4px 8px var(--shadow-dark),
+    inset -4px -4px 8px var(--shadow-light);
+}
+
+.neu-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+  box-shadow: none;
+}
+
+/* INPUT / SELECT: Concave (inset) */
+.neu-input {
+  border: none;
+  background: var(--bg-color);
+  border-radius: var(--radius-md);
+  padding: 14px 16px;
+  width: 100%;
+  box-sizing: border-box;
+  color: var(--accent-color);
+  font-family: var(--font-family);
+  font-size: 14px;
+  box-shadow: inset 5px 5px 10px var(--shadow-dark),
+    inset -5px -5px 10px var(--shadow-light);
+  margin-bottom: 12px;
+  transition: box-shadow 0.2s ease;
+}
+
+.neu-input:focus {
+  outline: none;
+  box-shadow: inset 6px 6px 12px var(--shadow-dark),
+    inset -6px -6px 12px var(--shadow-light);
+}
+
+/* Specific utilities */
+.mb-2 {
+  margin-bottom: 8px;
+}
+
+.mb-4 {
+  margin-bottom: 16px;
+}
+
+.w-full {
+  width: 100%;
+}
+
+.text-center {
+  text-align: center;
+}
+
+.text-sm {
+  font-size: 12px;
+}
+
+.text-xs {
+  font-size: 10px;
+}
+
+.font-bold {
+  font-weight: 700;
+}
+
+.flex-center {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.flex-between {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
