@@ -3,6 +3,7 @@ import Button from '../components/Button';
 import Input from '../components/Input';
 import Card from '../components/Card';
 import { KeyringController } from '../lib/keyring';
+import logo from '../res/logo.png';
 
 function Welcome({ onComplete }) {
     const [mnemonic, setMnemonic] = useState('');
@@ -42,6 +43,7 @@ function Welcome({ onComplete }) {
     if (mode === 'home') {
         return (
             <div className="welcome-container" style={{ padding: '20px', textAlign: 'center' }}>
+                <img src={logo} alt="Meme Wallet" style={{ width: '80px', height: '80px', marginBottom: '20px', borderRadius: '16px', boxShadow: 'var(--shadow-dark) 5px 5px 10px, var(--shadow-light) -5px -5px 10px' }} />
                 <h2>Welcome to Meme Wallet</h2>
                 <Card className="mb-4">
                     <p>The most meme-able crypto wallet extension.</p>

@@ -3,7 +3,13 @@
     "name": "Meme Wallet",
     "version": "1.0.0",
     "action": {
-        "default_popup": "index.html"
+        "default_popup": "index.html",
+        "default_icon": {
+            "128": "src/res/logo.png"
+        }
+    },
+    "icons": {
+        "128": "src/res/logo.png"
     },
     "permissions": [
         "storage"

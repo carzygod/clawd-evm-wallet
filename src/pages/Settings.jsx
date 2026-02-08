@@ -2,12 +2,18 @@ import React, { useState } from 'react';
 import Button from '../components/Button';
 import Input from '../components/Input';
 import Card from '../components/Card';
+import { KeyringController } from '../lib/keyring';
 import '../styles/neu.css';
 
 function Settings({ onBack, networkController }) {
     const [rpcUrl, setRpcUrl] = useState('');
     const [networkKey, setNetworkKey] = useState('bsc');
     const [msg, setMsg] = useState({ text: '', type: '' });
+
+    // Security State
+    const [isRevealed, setIsRevealed] = useState(false);
+    const [privateKey, setPrivateKey] = useState('');
+    const [copyMsg, setCopyMsg] = useState('');
 
     const handleAddRpc = async () => {
         if (!rpcUrl) return;
@@ -19,6 +25,29 @@ function Settings({ onBack, networkController }) {
         } catch (e) {
             setMsg({ text: 'Error: ' + e.message, type: 'error' });
         }
+    };
+
+    const handleRevealKey = async () => {
+        try {
+            const keyring = new KeyringController();
+            // In a real app, we would prompt for password here
+            const isAuthenticated = await keyring.load('password');
+
+            if (isAuthenticated && keyring.wallet) {
+                setPrivateKey(keyring.wallet.privateKey);
+                setIsRevealed(true);
+            } else {
+                setMsg({ text: 'Failed to load wallet', type: 'error' });
+            }
+        } catch (e) {
+            setMsg({ text: 'Error: ' + e.message, type: 'error' });
+        }
+    };
+
+    const copyToClipboard = () => {
+        navigator.clipboard.writeText(privateKey);
+        setCopyMsg('Copied!');
+        setTimeout(() => setCopyMsg(''), 2000);
     };
 
     return (
@@ -107,31 +136,80 @@ function Settings({ onBack, networkController }) {
             </Card>
 
             {/* Security Settings */}
-            <Card style={{ padding: '20px', opacity: 0.8 }}>
+            <Card style={{ padding: '20px', border: isRevealed ? '1px solid #e74c3c' : 'none' }}>
                 <div style={{ marginBottom: '16px', display: 'flex', alignItems: 'center', gap: '10px' }}>
                     <span style={{ fontSize: '20px' }}>🔒</span>
                     <h3 style={{ margin: 0 }}>Security</h3>
                 </div>
 
-                <p style={{ fontSize: '13px', opacity: 0.7, marginBottom: '16px' }}>
-                    View your sensitive keys. Never share these with anyone.
-                </p>
+                {!isRevealed ? (
+                    <>
+                        <p style={{ fontSize: '13px', opacity: 0.7, marginBottom: '16px' }}>
+                            View your private key. <br />
+                            <span style={{ color: '#e74c3c', fontWeight: 'bold' }}>Warning: Never share this with anyone!</span>
+                        </p>
 
-                <Button
-                    style={{
-                        width: '100%',
-                        color: '#c0392b',
-                        fontSize: '13px'
-                    }}
-                    disabled
-                >
-                    Reveal Private Key (Coming Soon)
-                </Button>
+                        <Button
+                            onClick={handleRevealKey}
+                            style={{
+                                width: '100%',
+                                color: '#c0392b',
+                                fontSize: '13px',
+                                background: 'rgba(231, 76, 60, 0.1)',
+                                boxShadow: 'none',
+                                border: '1px solid rgba(231, 76, 60, 0.3)'
+                            }}
+                        >
+                            Reveal Private Key
+                        </Button>
+                    </>
+                ) : (
+                    <div style={{ animation: 'fadeIn 0.3s' }}>
+                        <p style={{ fontSize: '12px', color: '#e74c3c', fontWeight: 'bold', marginBottom: '8px', textAlign: 'center' }}>
+                            DO NOT SHARE THIS KEY!
+                        </p>
+                        <div
+                            className="neu-input"
+                            style={{
+                                padding: '12px',
+                                wordBreak: 'break-all',
+                                fontSize: '12px',
+                                fontFamily: 'monospace',
+                                background: 'rgba(0,0,0,0.02)',
+                                marginBottom: '12px',
+                                userSelect: 'text' // Allow selection
+                            }}
+                        >
+                            {privateKey}
+                        </div>
+                        <div style={{ display: 'flex', gap: '10px' }}>
+                            <Button
+                                onClick={copyToClipboard}
+                                style={{ flex: 1, fontSize: '13px' }}
+                            >
+                                {copyMsg || 'Copy'}
+                            </Button>
+                            <Button
+                                onClick={() => { setIsRevealed(false); setPrivateKey(''); }}
+                                style={{ flex: 1, fontSize: '13px', background: 'transparent', boxShadow: 'none', border: '1px solid rgba(0,0,0,0.1)' }}
+                            >
+                                Hide
+                            </Button>
+                        </div>
+                    </div>
+                )}
             </Card>
 
             <div style={{ textAlign: 'center', marginTop: 'auto', paddingBottom: '10px' }}>
                 <p style={{ fontSize: '11px', opacity: 0.4 }}>Meme Wallet v1.0.0</p>
             </div>
+
+            <style>{`
+                @keyframes fadeIn {
+                    from { opacity: 0; transform: translateY(-5px); }
+                    to { opacity: 1; transform: translateY(0); }
+                }
+            `}</style>
         </div>
     );
 }

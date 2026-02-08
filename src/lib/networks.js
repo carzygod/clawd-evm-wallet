@@ -4,28 +4,28 @@ const DEFAULT_NETWORKS = {
     bsc: {
         chainId: 56,
         name: 'BNB Smart Chain',
-        rpcUrl: 'https://binance.llamarpc.com',
+        rpcUrl: 'https://bsc-dataseed.binance.org/',
         symbol: 'BNB',
         blockExplorer: 'https://bscscan.com'
     },
     eth: {
         chainId: 1,
         name: 'Ethereum',
-        rpcUrl: 'https://eth.llamarpc.com',
+        rpcUrl: 'https://rpc.flashbots.net',
         symbol: 'ETH',
         blockExplorer: 'https://etherscan.io'
     },
     arb: {
         chainId: 42161,
         name: 'Arbitrum One',
-        rpcUrl: 'https://arbitrum.llamarpc.com',
+        rpcUrl: 'https://arb1.arbitrum.io/rpc',
         symbol: 'ETH',
         blockExplorer: 'https://arbiscan.io'
     },
     pol: {
         chainId: 137,
         name: 'Polygon',
-        rpcUrl: 'https://polygon.llamarpc.com',
+        rpcUrl: 'https://polygon-rpc.com',
         symbol: 'POL',
         blockExplorer: 'https://polygonscan.com'
     }
@@ -39,7 +39,19 @@ export class NetworkController {
     async load() {
         const data = await chrome.storage.local.get('networks');
         if (data.networks) {
-            this.networks = { ...this.networks, ...JSON.parse(data.networks) };
+            const storedNetworks = JSON.parse(data.networks);
+            // Merge stored networks but force-update default networks (to apply RPC fixes)
+            this.networks = { ...storedNetworks };
+
+            // Re-apply defaults to ensure essential config (like RPCs) is up-to-date
+            for (const key of Object.keys(DEFAULT_NETWORKS)) {
+                if (this.networks[key]) {
+                    // Keep user customizations if needed, but for now we enforce the fix
+                    this.networks[key] = { ...this.networks[key], ...DEFAULT_NETWORKS[key] };
+                } else {
+                    this.networks[key] = DEFAULT_NETWORKS[key];
+                }
+            }
         }
     }
 

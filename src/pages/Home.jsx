@@ -5,6 +5,7 @@ import NetworkSelector from '../components/NetworkSelector';
 import { TransactionController } from '../lib/transaction';
 import { KeyringController } from '../lib/keyring';
 import { TokenController } from '../lib/tokens';
+import logo from '../res/logo.png';
 
 function Home({ onSend, onReceive, onSettings, onAddToken, network, setNetwork, networkController }) {
     const [balance, setBalance] = useState('0.00');
@@ -94,7 +95,9 @@ function Home({ onSend, onReceive, onSettings, onAddToken, network, setNetwork, 
         <div className="home-container" style={{ padding: '24px', height: '100%', display: 'flex', flexDirection: 'column', gap: '20px' }}>
             {/* Header with Settings */}
             <div className="flex-between" style={{ zIndex: 100 }}> {/* Z-index for dropdown */}
-                <div style={{ width: '40px' }}></div>
+                <div style={{ width: '40px', height: '40px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                    <img src={logo} alt="Logo" style={{ width: '32px', height: '32px', borderRadius: '8px' }} />
+                </div>
 
                 <NetworkSelector
                     network={network}
@@ -147,12 +150,6 @@ function Home({ onSend, onReceive, onSettings, onAddToken, network, setNetwork, 
                         <span style={{ fontSize: '24px' }}>↓</span>
                     </Button>
                     <p style={{ marginTop: '8px', fontSize: '12px', fontWeight: '600' }}>Receive</p>
-                </div>
-                <div className="text-center">
-                    <Button style={{ borderRadius: '50%', width: '64px', height: '64px', padding: 0, opacity: 0.5 }}>
-                        <span style={{ fontSize: '24px' }}>⇄</span>
-                    </Button>
-                    <p style={{ marginTop: '8px', fontSize: '12px', fontWeight: '600' }}>Swap</p>
                 </div>
             </div>
 

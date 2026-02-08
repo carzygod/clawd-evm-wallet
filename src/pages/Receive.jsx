@@ -2,6 +2,7 @@ import React from 'react';
 import Button from '../components/Button';
 import Card from '../components/Card';
 import { KeyringController } from '../lib/keyring';
+import QRCode from 'react-qr-code';
 
 function Receive({ onBack }) {
     const [address, setAddress] = React.useState('');
@@ -21,43 +22,70 @@ function Receive({ onBack }) {
     };
 
     return (
-        <div className="receive-container" style={{ padding: '24px', height: '100%', display: 'flex', flexDirection: 'column' }}>
-            <div style={{ display: 'flex', alignItems: 'center', marginBottom: '24px' }}>
-                <Button onClick={onBack} style={{ padding: '0', width: '40px', height: '40px', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                    <span style={{ fontSize: '18px' }}>←</span>
+        <div className="app-container" style={{ padding: '24px', display: 'flex', flexDirection: 'column', gap: '20px' }}>
+
+            {/* Header */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
+                <Button onClick={onBack} style={{ padding: '0', borderRadius: '50%', width: '40px', height: '40px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                    <span style={{ fontSize: '20px', paddingBottom: '2px' }}>←</span>
                 </Button>
-                <h2 style={{ marginLeft: '16px', fontSize: '20px' }}>Receive Assets</h2>
+                <h2 style={{ fontSize: '24px', fontWeight: '700', color: 'var(--accent-color)' }}>Receive</h2>
             </div>
 
-            <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center' }}>
-                <Card className="mb-4" style={{ padding: '30px', display: 'flex', flexDirection: 'column', alignItems: 'center', width: '100%' }}>
+            <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: '24px' }}>
+                <Card style={{ padding: '40px 24px', display: 'flex', flexDirection: 'column', alignItems: 'center', width: '100%', gap: '20px' }}>
+
+                    {/* QR Code Placeholder */}
                     <div style={{
-                        width: '180px',
-                        height: '180px',
+                        width: '200px',
+                        height: '200px',
                         background: 'var(--bg-color)',
-                        borderRadius: '20px',
+                        borderRadius: '30px',
                         boxShadow: 'inset 5px 5px 10px var(--shadow-dark), inset -5px -5px 10px var(--shadow-light)',
                         display: 'flex',
                         alignItems: 'center',
                         justifyContent: 'center',
-                        marginBottom: '24px'
+                        position: 'relative',
+                        padding: '10px'
                     }}>
-                        <span style={{ opacity: 0.3, fontWeight: 'bold' }}>QR Code</span>
+                        {address && (
+                            <QRCode
+                                value={address}
+                                size={160}
+                                style={{ height: "auto", maxWidth: "100%", width: "100%" }}
+                                viewBox={`0 0 256 256`}
+                                fgColor="#333"
+                                bgColor="transparent"
+                            />
+                        )}
                     </div>
 
-                    <p style={{ margin: 0, fontSize: '12px', fontWeight: 'bold', textTransform: 'uppercase', opacity: 0.5, letterSpacing: '1px' }}>Your Address</p>
-                    <p style={{ wordBreak: 'break-all', fontWeight: 'bold', fontSize: '14px', margin: '12px 0', textAlign: 'center', lineHeight: '1.4' }}>
-                        {address}
-                    </p>
+                    <div style={{ textAlign: 'center', width: '100%' }}>
+                        <p style={{ margin: 0, fontSize: '11px', fontWeight: '700', textTransform: 'uppercase', opacity: 0.5, letterSpacing: '1px' }}>Your Address</p>
+                        <p style={{
+                            wordBreak: 'break-all',
+                            fontWeight: '600',
+                            fontSize: '13px',
+                            margin: '12px 0 0 0',
+                            textAlign: 'center',
+                            lineHeight: '1.5',
+                            fontFamily: 'monospace',
+                            color: 'var(--text-color)'
+                        }}>
+                            {address}
+                        </p>
+                    </div>
                 </Card>
             </div>
 
-            <Button
-                onClick={copyAddress}
-                style={{ width: '100%', padding: '16px' }}
-            >
-                {copied ? 'Copied!' : 'Copy Address'}
-            </Button>
+            <div style={{ marginTop: 'auto' }}>
+                <Button
+                    onClick={copyAddress}
+                    style={{ width: '100%', padding: '16px', fontSize: '16px' }}
+                >
+                    {copied ? 'Address Copied!' : 'Copy Address'}
+                </Button>
+            </div>
         </div>
     );
 }
