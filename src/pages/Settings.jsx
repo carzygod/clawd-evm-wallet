@@ -8,7 +8,69 @@ import '../styles/neu.css';
 function Settings({ onBack, networkController }) {
     const [rpcUrl, setRpcUrl] = useState('');
     const [networkKey, setNetworkKey] = useState('bsc');
+    const [relayUrl, setRelayUrl] = useState('');
+    const [isConnected, setIsConnected] = useState(false);
     const [msg, setMsg] = useState({ text: '', type: '' });
+
+    // Poll for status
+    React.useEffect(() => {
+        const checkStatus = () => {
+            chrome.runtime.sendMessage({ type: 'GET_RELAY_STATUS' }, (response) => {
+                if (response) {
+                    setIsConnected(response.connected);
+                }
+            });
+        };
+
+        checkStatus(); // Initial check
+        const interval = setInterval(checkStatus, 2000); // Poll every 2s
+        return () => clearInterval(interval);
+    }, []);
+
+    const toggleConnection = () => {
+        chrome.runtime.sendMessage({ type: 'TOGGLE_RELAY' }, (response) => {
+            if (response) setIsConnected(response.connected);
+        });
+    };
+
+    // Load Relay URL on mount
+    React.useEffect(() => {
+        chrome.storage.local.get('relayUrl').then((data) => {
+            if (data.relayUrl) setRelayUrl(data.relayUrl);
+        });
+    }, []);
+
+    // Save Relay URL when it changes
+    React.useEffect(() => {
+        if (relayUrl) {
+            chrome.storage.local.set({ relayUrl });
+            chrome.runtime.sendMessage({ type: 'RELAY_CONFIG_UPDATED', url: relayUrl });
+        }
+    }, [relayUrl]);
+
+    // Whitelist State
+    const [whitelist, setWhitelist] = useState([]);
+    const [newWhitelistKey, setNewWhitelistKey] = useState('');
+
+    React.useEffect(() => {
+        chrome.storage.local.get('whitelist').then((data) => {
+            if (data.whitelist) setWhitelist(data.whitelist);
+        });
+    }, []);
+
+    const addWhitelistKey = () => {
+        if (!newWhitelistKey) return;
+        const updated = [...whitelist, newWhitelistKey];
+        setWhitelist(updated);
+        chrome.storage.local.set({ whitelist: updated });
+        setNewWhitelistKey('');
+    };
+
+    const removeWhitelistKey = (key) => {
+        const updated = whitelist.filter(k => k !== key);
+        setWhitelist(updated);
+        chrome.storage.local.set({ whitelist: updated });
+    };
 
     // Security State
     const [isRevealed, setIsRevealed] = useState(false);
@@ -109,6 +171,83 @@ function Settings({ onBack, networkController }) {
                         onChange={(e) => setRpcUrl(e.target.value)}
                         placeholder="https://rpc.example.com"
                     />
+                </div>
+
+                <div className="mb-4">
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+                        <label style={{ fontSize: '12px', fontWeight: '600', opacity: 0.8, textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                            Relay URL (WebSocket)
+                        </label>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                            <div style={{
+                                width: '8px',
+                                height: '8px',
+                                borderRadius: '50%',
+                                background: isConnected ? '#2ecc71' : '#e74c3c'
+                            }} />
+                            <span style={{ fontSize: '11px', fontWeight: '600', color: isConnected ? '#2ecc71' : '#e74c3c' }}>
+                                {isConnected ? 'Connected' : 'Disconnected'}
+                            </span>
+                        </div>
+                    </div>
+                    <div style={{ display: 'flex', gap: '8px' }}>
+                        <Input
+                            value={relayUrl}
+                            onChange={(e) => setRelayUrl(e.target.value)}
+                            placeholder="ws://localhost:8080"
+                        />
+                        <Button
+                            onClick={toggleConnection}
+                            style={{
+                                width: 'auto',
+                                padding: '0 12px',
+                                fontSize: '12px',
+                                background: isConnected ? 'rgba(231, 76, 60, 0.1)' : 'rgba(46, 204, 113, 0.1)',
+                                color: isConnected ? '#e74c3c' : '#27ae60',
+                                border: `1px solid ${isConnected ? 'rgba(231, 76, 60, 0.3)' : 'rgba(46, 204, 113, 0.3)'}`
+                            }}
+                        >
+                            {isConnected ? 'Disconnect' : 'Connect'}
+                        </Button>
+                    </div>
+                </div>
+
+                <div className="mb-4">
+                    <label style={{ display: 'block', marginBottom: '8px', fontSize: '12px', fontWeight: '600', opacity: 0.8, textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                        Trusted Apps (Ed25519 PubKeys)
+                    </label>
+                    <div style={{ display: 'flex', gap: '8px' }}>
+                        <Input
+                            value={newWhitelistKey}
+                            onChange={(e) => setNewWhitelistKey(e.target.value)}
+                            placeholder="Add Public Key (Hex)"
+                        />
+                        <Button onClick={addWhitelistKey} style={{ width: 'auto', padding: '0 16px' }}>+</Button>
+                    </div>
+                    {whitelist.length > 0 && (
+                        <div style={{ marginTop: '10px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                            {whitelist.map((key) => (
+                                <div key={key} style={{
+                                    background: 'rgba(0,0,0,0.03)',
+                                    padding: '8px 12px',
+                                    borderRadius: '8px',
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    justifyContent: 'space-between',
+                                    fontSize: '12px',
+                                    fontFamily: 'monospace'
+                                }}>
+                                    <span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>{key}</span>
+                                    <span
+                                        onClick={() => removeWhitelistKey(key)}
+                                        style={{ cursor: 'pointer', color: '#e74c3c', fontWeight: 'bold', marginLeft: '10px' }}
+                                    >
+                                        ✕
+                                    </span>
+                                </div>
+                            ))}
+                        </div>
+                    )}
                 </div>
 
                 <Button
