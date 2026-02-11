@@ -58,6 +58,22 @@ function Settings({ onBack, networkController }) {
         });
     }, []);
 
+    // Auto Confirm State
+    const [autoConfirm, setAutoConfirm] = useState(false);
+
+    React.useEffect(() => {
+        chrome.storage.local.get('autoConfirm').then((data) => {
+            // Default to false if not set
+            setAutoConfirm(Boolean(data.autoConfirm));
+        });
+    }, []);
+
+    const toggleAutoConfirm = () => {
+        const newValue = !autoConfirm;
+        setAutoConfirm(newValue);
+        chrome.storage.local.set({ autoConfirm: newValue });
+    };
+
     const addWhitelistKey = () => {
         if (!newWhitelistKey) return;
         const updated = [...whitelist, newWhitelistKey];
@@ -248,6 +264,30 @@ function Settings({ onBack, networkController }) {
                             ))}
                         </div>
                     )}
+                </div>
+
+                <div className="mb-4">
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                        <div>
+                            <label style={{ display: 'block', fontSize: '12px', fontWeight: '600', opacity: 0.8, textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                                Auto-Confirm Whitelisted
+                            </label>
+                            <p style={{ fontSize: '10px', opacity: 0.5, margin: '4px 0 0 0', maxWidth: '200px' }}>
+                                Automatically sign requests from whitelisted apps without a popup.
+                            </p>
+                        </div>
+                        <div onClick={toggleAutoConfirm} style={{
+                            width: '44px', height: '24px', background: autoConfirm ? '#2ecc71' : 'rgba(0,0,0,0.1)',
+                            borderRadius: '20px', position: 'relative', cursor: 'pointer', transition: 'background 0.3s',
+                            boxShadow: 'inset 0 2px 4px rgba(0,0,0,0.1)'
+                        }}>
+                            <div style={{
+                                width: '20px', height: '20px', background: '#fff', borderRadius: '50%',
+                                position: 'absolute', top: '2px', left: autoConfirm ? '22px' : '2px', transition: 'left 0.3s',
+                                boxShadow: '0 2px 4px rgba(0,0,0,0.2)'
+                            }} />
+                        </div>
+                    </div>
                 </div>
 
                 <Button

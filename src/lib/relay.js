@@ -12,6 +12,7 @@ export class RelayController {
         this.networkController = new NetworkController();
         this.isConnected = false;
         this.manuallyDisconnected = false;
+        this.pendingResolvers = new Map();
     }
 
     async init() {
@@ -44,6 +45,23 @@ export class RelayController {
                 // Trigger connection if we were waiting for unlock
                 if (this.url && !this.isConnected && !this.manuallyDisconnected) {
                     this.connect(this.url);
+                }
+            } else if (message.type === 'CONFIRM_TX') {
+                console.log('[Relay] Received CONFIRM_TX for ID:', message.id);
+                console.log('[Relay] Pending Resolvers:', [...this.pendingResolvers.keys()]);
+                const resolver = this.pendingResolvers.get(message.id);
+                if (resolver) {
+                    resolver.resolve(true);
+                    this.pendingResolvers.delete(message.id);
+                } else {
+                    console.warn('[Relay] No resolver found for ID:', message.id);
+                }
+            } else if (message.type === 'REJECT_TX') {
+                console.log('[Relay] Received REJECT_TX for ID:', message.id);
+                const resolver = this.pendingResolvers.get(message.id);
+                if (resolver) {
+                    resolver.reject(new Error('User rejected the request'));
+                    this.pendingResolvers.delete(message.id);
                 }
             }
         });
@@ -261,7 +279,7 @@ export class RelayController {
 
             await chrome.storage.local.set({ [nonceKey]: data.nonce });
 
-            const result = await this.executeMethod(data.method, data.params);
+            const result = await this.executeMethod(data.method, data.params, data.id);
             await this.sendSignedResponse(data.id, data.nonce, result);
 
         } catch (e) {
@@ -270,7 +288,7 @@ export class RelayController {
         }
     }
 
-    async executeMethod(method, params) {
+    async executeMethod(method, params, id) {
         switch (method) {
             case 'get_address':
                 const pubData = await chrome.storage.local.get('publicAddress');
@@ -279,13 +297,13 @@ export class RelayController {
 
             case 'sign_transaction':
                 if (await this.keyring.load()) {
+                    await this.requestUserApproval(id, method, params);
+
                     const tx = params[0];
-                    console.log('[Relay] sign_transaction request:', JSON.stringify(tx, null, 2));
+                    console.log('[Relay] sign_transaction request approved:', JSON.stringify(tx, null, 2));
 
                     // Basic Validation
                     if (tx.to && !ethers.isAddress(tx.to)) {
-                        // If it's not a valid address, check if it looks like an ENS name (contains .)
-                        // The user provided "0x123..." which is neither.
                         if (!tx.to.includes('.')) {
                             throw new Error(`Invalid 'to' address: ${tx.to}. Must be valid Ethereum address (42 chars) or ENS name.`);
                         }
@@ -318,9 +336,6 @@ export class RelayController {
                             if (network) {
                                 console.log('[Relay] Using Fallback Provider (Selected Network):', network.name);
                                 provider = new ethers.JsonRpcProvider(network.rpcUrl);
-
-                                // Inject chainId if missing, to help ethers?
-                                // Actually better to let ethers populate it from provider
                             }
                         }
                     }
@@ -341,8 +356,10 @@ export class RelayController {
 
             case 'send_transaction':
                 if (await this.keyring.load()) {
+                    await this.requestUserApproval(id, method, params);
+
                     const tx = params[0];
-                    console.log('[Relay] send_transaction request:', JSON.stringify(tx, null, 2));
+                    console.log('[Relay] send_transaction request approved:', JSON.stringify(tx, null, 2));
 
                     // Basic Validation
                     if (tx.to && !ethers.isAddress(tx.to)) {
@@ -385,6 +402,7 @@ export class RelayController {
 
             case 'sign_message':
                 if (await this.keyring.load()) {
+                    await this.requestUserApproval(id, method, params);
                     return await this.keyring.signMessage(params[0]);
                 } else {
                     throw new Error('Wallet Locked. Please unlock to sign.');
@@ -423,12 +441,69 @@ export class RelayController {
         }
     }
 
+    async sendSignedError(id, nonce, errorMsg, code = -32603) {
+        const responseData = {
+            nonce: nonce,
+            id: id,
+            result: null,
+            error: errorMsg,
+            code: code
+        };
+
+        try {
+            if (await this.keyring.load()) {
+                const messageString = JSON.stringify(responseData);
+                const signature = await this.keyring.signMessage(messageString);
+                const address = this.keyring.getAddress();
+
+                this.ws.send(JSON.stringify({
+                    type: 'wallet_response', // Added type for clarity, though server might look at structure
+                    data: responseData,
+                    auth: { address, signature }
+                }));
+            }
+        } catch (e) {
+            console.error('[Relay] Failed to sign error response:', e);
+            // Fallback to unsigned error if signing fails?
+            // Server might reject it, but better than nothing.
+            this.ws.send(JSON.stringify({
+                type: 'wallet_response',
+                data: responseData,
+                auth: null
+            }));
+        }
+    }
+
     sendErrorResponse(id, nonce, errorMsg) {
-        this.ws.send(JSON.stringify({
-            protocol: 'eth/v1',
-            data: { id, nonce, error: errorMsg, result: null },
-            auth: null
-        }));
+        // Legacy unsigned implementation, maybe replace?
+        this.sendSignedError(id, nonce, errorMsg);
+    }
+
+
+    async requestUserApproval(id, method, params) {
+        // 1. Check Auto-Confirm Setting
+        const settings = await chrome.storage.local.get('autoConfirm');
+        if (settings.autoConfirm) {
+            return true; // Auto-confirm enabled
+        }
+
+        // 2. Prepare Pending Request
+        await chrome.storage.local.set({
+            pendingRequest: { id, method, params }
+        });
+
+        // 3. Open Confirmation Popup
+        await chrome.windows.create({
+            url: 'index.html#confirm',
+            type: 'popup',
+            width: 360,
+            height: 600
+        });
+
+        // 4. Wait for User Action
+        return new Promise((resolve, reject) => {
+            this.pendingResolvers.set(id, { resolve, reject });
+        });
     }
 
     hexToBytes(hex) {

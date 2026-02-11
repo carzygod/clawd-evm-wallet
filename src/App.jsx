@@ -8,6 +8,7 @@ const Send = React.lazy(() => import('./pages/Send'));
 const Receive = React.lazy(() => import('./pages/Receive'));
 const Settings = React.lazy(() => import('./pages/Settings'));
 const AddToken = React.lazy(() => import('./pages/AddToken'));
+const Confirmation = React.lazy(() => import('./pages/Confirmation'));
 
 // We need a small loading component
 const Loader = () => (
@@ -25,6 +26,12 @@ function App() {
         // Dynamically import heavy logic
         const init = async () => {
             try {
+                // Check if opened for confirmation immediately
+                if (window.location.hash === '#confirm') {
+                    setView('confirmation');
+                    return;
+                }
+
                 const { NetworkController } = await import('./lib/networks');
                 const { KeyringController } = await import('./lib/keyring');
 
@@ -95,6 +102,8 @@ function App() {
             {view === 'add-token' && networkController && (
                 <AddToken onBack={() => setView('home')} network={network} networkController={networkController} />
             )}
+
+            {view === 'confirmation' && <Confirmation />}
         </Suspense>
     );
 }

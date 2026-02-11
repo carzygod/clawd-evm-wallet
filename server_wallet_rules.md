@@ -29,3 +29,22 @@ Aligned with `wallet_require.md`.
 ## 3. Server Verification
 1.  **Timestamp**: `abs(now - timestamp) < 30s`.
 2.  **Signature**: Recover address from `signature`. Match `payload.address`.
+
+## 4. Error Codes (Wallet -> Server)
+
+When a request fails or is rejected by the user, the `error` field in the response MUST follow these codes:
+
+-   **4001**: User Rejected Request (Classic EIP-1193).
+-   **-32603**: Internal Error (Execution failed).
+-   **-32601**: Method not found.
+
+Example Rejection:
+```json
+{
+  "nonce": 123,
+  "id": 1,
+  "error": "User rejected the request",
+  "code": 4001,
+  "result": null
+}
+```
