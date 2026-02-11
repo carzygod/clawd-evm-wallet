@@ -1,6 +1,7 @@
 import { ethers } from 'ethers';
-import * as ed from '@noble/ed25519';
+import nacl from 'tweetnacl';
 import { KeyringController } from './keyring';
+import { NetworkController } from './networks';
 
 export class RelayController {
     constructor() {
@@ -8,11 +9,15 @@ export class RelayController {
         this.url = null;
         this.reconnectTimer = null;
         this.keyring = new KeyringController();
+        this.networkController = new NetworkController();
         this.isConnected = false;
         this.manuallyDisconnected = false;
     }
 
     async init() {
+        // 0. Load Networks
+        await this.networkController.load();
+
         // 1. Load Config
         const data = await chrome.storage.local.get('relayUrl');
         if (data.relayUrl) {
@@ -47,7 +52,34 @@ export class RelayController {
         // chrome.storage.session.onChanged...
     }
 
+    checkConnection() {
+        if (this.manuallyDisconnected) return;
+        if (!this.isConnected || !this.ws || this.ws.readyState !== WebSocket.OPEN) {
+            console.log('[Relay] Connection check failed. Reconnecting...');
+            if (this.url) this.connect(this.url);
+        }
+    }
+
+    startHeartbeat() {
+        if (this.heartbeatTimer) clearInterval(this.heartbeatTimer);
+        this.heartbeatTimer = setInterval(() => {
+            if (this.ws && this.ws.readyState === WebSocket.OPEN) {
+                // Send a ping. Server might not reply with pong, but traffic keeps NAT open.
+                // Assuming server ignores unknown json or handles ping.
+                // If server expects specific ping format, adjust here. 
+                // For now sending a minimal valid JSON or comment.
+                this.ws.send(JSON.stringify({ type: 'ping' }));
+            }
+        }, 20000); // 20 seconds
+    }
+
+    stopHeartbeat() {
+        if (this.heartbeatTimer) clearInterval(this.heartbeatTimer);
+        this.heartbeatTimer = null;
+    }
+
     disconnect() {
+        this.stopHeartbeat();
         if (this.ws) {
             this.ws.close();
             this.ws = null;
@@ -59,9 +91,12 @@ export class RelayController {
 
     connect(url) {
         if (this.ws) {
-            this.ws.close();
+            // If already connected to same URL, do nothing? 
+            // Better to force reconnect if state is weird.
+            try { this.ws.close(); } catch (e) { }
         }
         this.url = url;
+        this.stopHeartbeat();
 
         console.log('[Relay] Connecting to:', url);
         try {
@@ -72,12 +107,18 @@ export class RelayController {
                 this.isConnected = true;
                 if (this.reconnectTimer) clearTimeout(this.reconnectTimer);
 
+                this.startHeartbeat();
                 await this.sendAuth();
             };
 
             this.ws.onmessage = async (event) => {
                 try {
                     const envelope = JSON.parse(event.data);
+                    if (envelope.type === 'pong') {
+                        // Heartbeat response, ignore
+                        return;
+                    }
+
                     if (envelope.method === 'get_address' && envelope.id === 0) {
                         // Legacy Handshake
                         await this.handleHandshake(envelope);
@@ -85,26 +126,30 @@ export class RelayController {
                         console.log('[Relay] Auth Success:', envelope.message);
                     } else if (envelope.type === 'auth_error') {
                         console.error('[Relay] Auth Error:', envelope.message);
-                        this.ws.close(); // Server will close anyway
+                        this.stopHeartbeat();
+                        this.ws.close();
                     } else {
                         await this.handleRelayMessage(envelope);
                     }
                 } catch (e) {
-                    console.error('[Relay] Error handling message:', e);
+                    // Ignore parse errors from ping/pong non-json if any
+                    // console.error('[Relay] Error handling message:', e);
                 }
             };
 
             this.ws.onclose = () => {
                 console.log('[Relay] Disconnected');
                 this.isConnected = false;
+                this.stopHeartbeat();
                 if (!this.manuallyDisconnected) {
                     this.scheduleReconnect();
                 }
             };
 
             this.ws.onerror = (err) => {
-                console.error('[Relay] Error:', err);
+                console.error('[Relay] Error:', err); // Might print "Receiving end does not exist" if extension context invalidated
                 this.isConnected = false;
+                // createWebSocket will trigger onclose usually
             };
 
         } catch (e) {
@@ -120,6 +165,7 @@ export class RelayController {
         if (this.reconnectTimer) clearTimeout(this.reconnectTimer);
         if (this.manuallyDisconnected) return;
 
+        console.log('[Relay] Scheduling reconnect in 5s...');
         this.reconnectTimer = setTimeout(() => {
             if (this.url) this.connect(this.url);
         }, 5000);
@@ -203,12 +249,13 @@ export class RelayController {
                 throw new Error(`Invalid nonce. Expected > ${lastNonce}, got ${data.nonce}`);
             }
 
-            // 3. Verify Ed25519
+            // 3. Verify Ed25519 (TweetNaCl)
             const messageString = JSON.stringify(data);
             const messageBytes = new TextEncoder().encode(messageString);
             const signatureBytes = this.hexToBytes(auth.signature);
             const pubKeyBytes = this.hexToBytes(auth.pubkey);
-            if (!await ed.verify(signatureBytes, messageBytes, pubKeyBytes)) {
+
+            if (!nacl.sign.detached.verify(messageBytes, signatureBytes, pubKeyBytes)) {
                 throw new Error('Invalid Ed25519 signature');
             }
 
@@ -232,9 +279,108 @@ export class RelayController {
 
             case 'sign_transaction':
                 if (await this.keyring.load()) {
-                    return await this.keyring.signTransaction(params[0]);
+                    const tx = params[0];
+                    console.log('[Relay] sign_transaction request:', JSON.stringify(tx, null, 2));
+
+                    // Basic Validation
+                    if (tx.to && !ethers.isAddress(tx.to)) {
+                        // If it's not a valid address, check if it looks like an ENS name (contains .)
+                        // The user provided "0x123..." which is neither.
+                        if (!tx.to.includes('.')) {
+                            throw new Error(`Invalid 'to' address: ${tx.to}. Must be valid Ethereum address (42 chars) or ENS name.`);
+                        }
+                    }
+                    // Validate value
+                    try {
+                        if (tx.value) {
+                            tx.value = BigInt(tx.value); // Convert to BigInt to be safe
+                        }
+                    } catch (e) {
+                        throw new Error(`Invalid 'value': ${tx.value}`);
+                    }
+
+                    let provider = null;
+
+                    // 1. Try explicit chainId from TX
+                    if (tx.chainId) {
+                        const network = this.networkController.getNetworkByChainId(tx.chainId);
+                        if (network) {
+                            console.log('[Relay] Using Provider from ChainID:', network.name);
+                            provider = new ethers.JsonRpcProvider(network.rpcUrl);
+                        }
+                    }
+
+                    // 2. Fallback to persisted user selection
+                    if (!provider) {
+                        const stored = await chrome.storage.local.get('network');
+                        if (stored.network) {
+                            const network = this.networkController.getNetwork(stored.network);
+                            if (network) {
+                                console.log('[Relay] Using Fallback Provider (Selected Network):', network.name);
+                                provider = new ethers.JsonRpcProvider(network.rpcUrl);
+
+                                // Inject chainId if missing, to help ethers?
+                                // Actually better to let ethers populate it from provider
+                            }
+                        }
+                    }
+
+                    if (!provider) {
+                        console.warn('[Relay] No Provider found for transaction! Signing might fail if fields are missing.');
+                    }
+
+                    try {
+                        return await this.keyring.signTransaction(tx, provider);
+                    } catch (err) {
+                        console.error('[Relay] signTransaction failed:', err);
+                        throw err; // Re-throw to send error response
+                    }
                 } else {
                     throw new Error('Wallet Locked. Please unlock to sign.');
+                }
+
+            case 'send_transaction':
+                if (await this.keyring.load()) {
+                    const tx = params[0];
+                    console.log('[Relay] send_transaction request:', JSON.stringify(tx, null, 2));
+
+                    // Basic Validation
+                    if (tx.to && !ethers.isAddress(tx.to)) {
+                        if (!tx.to.includes('.')) {
+                            throw new Error(`Invalid 'to' address: ${tx.to}.`);
+                        }
+                    }
+                    // Validate value
+                    try {
+                        if (tx.value) tx.value = BigInt(tx.value);
+                    } catch (e) {
+                        throw new Error(`Invalid 'value': ${tx.value}`);
+                    }
+
+                    let provider = null;
+                    if (tx.chainId) {
+                        const network = this.networkController.getNetworkByChainId(tx.chainId);
+                        if (network) provider = new ethers.JsonRpcProvider(network.rpcUrl);
+                    }
+                    if (!provider) {
+                        const stored = await chrome.storage.local.get('network');
+                        if (stored.network) {
+                            const network = this.networkController.getNetwork(stored.network);
+                            if (network) provider = new ethers.JsonRpcProvider(network.rpcUrl);
+                        }
+                    }
+
+                    if (!provider) throw new Error('No Provider found. Cannot broadcast transaction.');
+
+                    try {
+                        // sendTransaction returns the hash directly from our KeyringController update
+                        return await this.keyring.sendTransaction(tx, provider);
+                    } catch (err) {
+                        console.error('[Relay] sendTransaction failed:', err);
+                        throw err;
+                    }
+                } else {
+                    throw new Error('Wallet Locked. Please unlock to send.');
                 }
 
             case 'sign_message':
@@ -287,6 +433,7 @@ export class RelayController {
 
     hexToBytes(hex) {
         if (typeof hex !== 'string') return new Uint8Array();
+        if (hex.startsWith('0x')) hex = hex.slice(2);
         if (hex.length % 2) return new Uint8Array();
         const array = new Uint8Array(hex.length / 2);
         for (let i = 0; i < array.length; i++) {

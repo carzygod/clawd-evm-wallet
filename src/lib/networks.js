@@ -59,6 +59,18 @@ export class NetworkController {
         await chrome.storage.local.set({ 'networks': JSON.stringify(this.networks) });
     }
 
+    getNetworkByChainId(chainId) {
+        if (!chainId) return null;
+        // chainId might be hex or number
+        const id = Number(chainId);
+        for (const key of Object.keys(this.networks)) {
+            if (this.networks[key].chainId === id) {
+                return this.networks[key];
+            }
+        }
+        return null;
+    }
+
     getNetwork(key) {
         return this.networks[key];
     }

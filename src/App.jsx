@@ -32,6 +32,12 @@ function App() {
                 await nc.load();
                 setNetworkController(nc);
 
+                // Load saved network preference
+                const netData = await chrome.storage.local.get('network');
+                if (netData.network) {
+                    setNetwork(netData.network);
+                }
+
                 const keyring = new KeyringController();
                 const hasWallet = await keyring.load('password');
                 if (hasWallet) {
@@ -45,6 +51,13 @@ function App() {
         };
         init();
     }, []);
+
+    // Save network preference whenever it changes
+    useEffect(() => {
+        if (network) {
+            chrome.storage.local.set({ network });
+        }
+    }, [network]);
 
     const handleWalletCreated = () => {
         setView('home');

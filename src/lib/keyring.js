@@ -42,9 +42,22 @@ export class KeyringController {
         }
     }
 
-    async signTransaction(transaction) {
+    async signTransaction(transaction, provider = null) {
         if (!this.wallet) throw new Error('Wallet not initialized');
-        return await this.wallet.signTransaction(transaction);
+        let wallet = this.wallet;
+        if (provider) {
+            wallet = wallet.connect(provider);
+        }
+        return await wallet.signTransaction(transaction);
+    }
+
+    async sendTransaction(transaction, provider) {
+        if (!this.wallet) throw new Error('Wallet not initialized');
+        if (!provider) throw new Error('Provider required for sending transaction');
+
+        const wallet = this.wallet.connect(provider);
+        const response = await wallet.sendTransaction(transaction);
+        return response.hash; // Return the transaction hash
     }
 
     async signMessage(message) {

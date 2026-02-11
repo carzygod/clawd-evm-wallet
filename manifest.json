@@ -12,7 +12,8 @@
         "128": "src/res/logo.png"
     },
     "permissions": [
-        "storage"
+        "storage",
+        "alarms"
     ],
     "background": {
         "service_worker": "src/background/index.js",
